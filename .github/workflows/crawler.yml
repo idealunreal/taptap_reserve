@@ -1,0 +1,85 @@
+name: TapTap Reserve Crawler
+
+on:
+  schedule:
+    # GitHub Actions 的 cron 使用 UTC 时间。
+    # 主跑:UTC+8 上午 10:00 == UTC 02:00。
+    - cron: "0 2 * * *"
+    # 备份:UTC+8 14:17 == UTC 06:17。
+    # 选非整点的奇数分钟、避开整点高峰(GitHub 定时任务在 :00 最易被延迟/丢弃);
+    # 若主跑当天被跳过或失败,这次会补抓。代码幂等,无新数据时会自动跳过提交。
+    - cron: "17 6 * * *"
+  # 允许在 Actions 页面手动触发,方便调试。
+  workflow_dispatch:
+
+# 让默认的 GITHUB_TOKEN 拥有提交回仓库的权限。
+permissions:
+  contents: write
+
+# 避免上一次任务还没跑完又触发下一次。
+concurrency:
+  group: taptap-crawler
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    # 给整个任务设上限,卡死/挂起时自动终止,避免空耗额度。
+    timeout-minutes: 30
+    env:
+      # 让 datetime.now() 按北京时间计算窗口,与发布日期口径一致。
+      TZ: Asia/Shanghai
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        # pip 自身也加重试 + 超时,缓解临时网络抖动。
+        run: pip install --retries 5 --timeout 30 requests
+
+      - name: Run crawler (失败自动整轮重试)
+        # crawler.py 是幂等的:同一天重复跑只覆盖当天记录,所以可以放心整轮重试。
+        # 单次 HTTP 请求在脚本内部已重试 3 次,这里再套一层「整轮重试」兜底,
+        # 尽量把当天所有游戏的数据都抓全。
+        run: |
+          attempt=1
+          max_attempts=5
+          until python crawler.py --once; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::warning::爬虫重试 ${max_attempts} 次后仍有失败项,提交已抓到的部分数据。"
+              break
+            fi
+            echo "::warning::第 ${attempt} 次执行未全部成功,60s 后重试..."
+            attempt=$((attempt + 1))
+            sleep 60
+          done
+
+      - name: Commit and push updated data
+        # always():即使上一步有非致命失败,也要把已经抓到的数据提交上去,确保当天有记录。
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reserve.csv data 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "没有数据变化,跳过提交。"
+            exit 0
+          fi
+          git commit -m "chore: update reserve data ($(date +'%Y-%m-%d'))"
+          # push 可能因为他人/其他任务同时提交而失败,这里 rebase 远端后重试几次。
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "推送成功。"
+              exit 0
+            fi
+            echo "第 ${i} 次推送失败,rebase 远端后重试..."
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep 5
+          done
+          echo "::error::多次重试后仍推送失败。"
+          exit 1
