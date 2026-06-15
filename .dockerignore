@@ -1,0 +1,16 @@
+# 构建上下文里不需要的东西(让镜像更小、避免把本机 git 历史/密钥/日志打进镜像)
+.git
+.github
+.venv
+scripts
+__pycache__/
+*.pyc
+*.log
+cron_run.log
+README.md
+.gitattributes
+.dockerignore
+Dockerfile
+# 数据由运行时 clone 远端获得(git 模式),不烘焙进镜像,避免陈旧
+data/
+reserve.csv
