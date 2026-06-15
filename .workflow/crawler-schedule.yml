@@ -26,13 +26,13 @@ triggers:
       cron: '0 0 10 * * ?'
       branches:
         precise:
-          - master
+          - main
     - name: dailyBackup
       # 北京时间 14:00 备份兜底(主跑成功且数据没变时会自动跳过提交)
       cron: '0 0 14 * * ?'
       branches:
         precise:
-          - master
+          - main
 
 stages:
   - name: crawl
@@ -78,11 +78,11 @@ stages:
 
               AUTH_URL="https://oauth2:${GITEE_TOKEN}@gitee.com/${GITEE_REPO_PATH}.git"
               for i in 1 2 3 4 5; do
-                if git push "$AUTH_URL" "HEAD:master"; then
+                if git push "$AUTH_URL" "HEAD:main"; then
                   echo "推送成功"; exit 0
                 fi
                 echo "第 ${i} 次推送失败,rebase 远端后重试..."
-                git pull --rebase --autostash "$AUTH_URL" master || true
+                git pull --rebase --autostash "$AUTH_URL" main || true
                 sleep 5
               done
               echo "多次重试后仍推送失败"; exit 1
