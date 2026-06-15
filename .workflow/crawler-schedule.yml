@@ -1,88 +1,74 @@
 # Gitee Go 流水线 —— TapTap 预约爬虫(定时)
 # 放在仓库的 .workflow/ 目录下;Gitee Go 会自动识别。
 #
-# ⚠️ 注意:Gitee Go 的语法与 GitHub Actions 完全不同,本文件是【起始模板】。
-#    强烈建议在 Gitee 仓库网页端「流水线 → 新建 → 可视化编辑器」里核对以下两点:
-#      1) 定时触发 schedule 的字段名与 cron 写法(Gitee Go 用 Quartz 6 段格式)
-#      2) shell 步骤插件名(shell@1)与 inputs 字段名
-#    可视化编辑器会生成/校验正确的 YAML,把下面的 shell 逻辑粘进去最稳妥。
-#
-# 与 GitHub 版的差异:
-#   - cron 是 Quartz 6 段「秒 分 时 日 月 周」,且 Gitee Go 按北京时间(无需换算 UTC)
-#       0 0 10 * * ?  => 每天 10:00:00
-#       0 0 14 * * ?  => 每天 14:00:00(备份)
-#   - 没有 actions/checkout:流水线默认已检出当前仓库代码
-#   - 回写数据需要 Gitee 私人令牌(在「流水线 → 设置 → 环境变量/私密」里加 GITEE_TOKEN)
+# 说明:
+#   - cron 为 Quartz 6 段「秒 分 时 日 月 周」,Gitee Go 按北京时间(无需换算 UTC)。
+#     注意第一段是「秒」:用 0 表示整点的第 0 秒只触发一次;若写 * 会在该分钟内每秒触发。
+#   - 流水线默认已检出当前仓库代码,无需 checkout 步骤。
+#   - 回写数据需在「流水线 → 设置 → 变量与缓存」里配置两个变量:
+#       GITEE_TOKEN     有仓库写权限的私人令牌(设为「私密」)
+#       GITEE_REPO_PATH 形如 <用户名>/taptap_reserve
 
 version: '1.0'
 name: taptap-reserve-crawler
-displayName: 'TapTap 预约爬虫(定时)'
+displayName: TapTap 预约爬虫(定时)
 
-# 触发器:仅定时,不在 push 时跑
 triggers:
+  trigger: auto
   schedule:
-    - name: dailyMain
-      # 北京时间 10:00 主跑(Quartz: 秒 分 时 日 月 周)
-      cron: '0 0 10 * * ?'
-      branches:
-        precise:
-          - main
-    - name: dailyBackup
-      # 北京时间 14:00 备份兜底(主跑成功且数据没变时会自动跳过提交)
-      cron: '0 0 14 * * ?'
-      branches:
-        precise:
-          - main
+    # 北京时间 10:00 主跑
+    - cron: '0 0 10 * * ?'
+    # 北京时间 14:00 备份兜底(主跑成功且数据没变时会自动跳过提交)
+    - cron: '0 0 14 * * ?'
 
 stages:
   - name: crawl
-    displayName: '抓取并回写'
-    failFast: false
+    displayName: 抓取并回写
+    strategy: naturally
+    trigger: auto
     steps:
       - step: shell@1
         name: run_crawler
-        displayName: '运行爬虫并提交数据'
+        displayName: 运行爬虫并提交数据
         inputs:
-          # ⚠️ 部分 Gitee Go 版本此字段名为 script,请以可视化编辑器为准
-          shell:
-            - |
-              set -uo pipefail
-              export TZ="Asia/Shanghai"
+          shell: |
+            set -uo pipefail
+            export TZ="Asia/Shanghai"
 
-              # GITEE_TOKEN: 在流水线环境变量里配置的、有仓库写权限的私人令牌
-              # GITEE_REPO_PATH: 形如 <用户名>/<仓库名>
-              : "${GITEE_TOKEN:?需在流水线环境变量中配置 GITEE_TOKEN}"
-              : "${GITEE_REPO_PATH:?需配置 GITEE_REPO_PATH,如 your_name/taptap_reserve}"
+            # GITEE_TOKEN: 有仓库写权限的私人令牌(在流水线变量里配置为私密)
+            # GITEE_REPO_PATH: 形如 <用户名>/taptap_reserve
+            : "${GITEE_TOKEN:?需在流水线变量中配置 GITEE_TOKEN}"
+            : "${GITEE_REPO_PATH:?需配置 GITEE_REPO_PATH,如 your_name/taptap_reserve}"
 
-              python3 -m pip install --user --retries 5 --timeout 30 requests
+            python3 -m pip install --user --retries 5 --timeout 30 requests
 
-              git config user.name  "gitee-crawler-bot"
-              git config user.email "gitee-crawler-bot@users.noreply.gitee.com"
+            git config user.name  "gitee-crawler-bot"
+            git config user.email "gitee-crawler-bot@users.noreply.gitee.com"
 
-              # 整轮重试(crawler.py 幂等:同一天重复跑只覆盖当天记录)
-              attempt=1; max_attempts=5
-              until python3 crawler.py --once; do
-                if [ "$attempt" -ge "$max_attempts" ]; then
-                  echo "爬虫重试 ${max_attempts} 次后仍有失败项,提交已抓到的部分数据"
-                  break
-                fi
-                echo "第 ${attempt} 次未全部成功,60s 后重试..."
-                attempt=$((attempt + 1)); sleep 60
-              done
-
-              git add reserve.csv data 2>/dev/null || true
-              if git diff --staged --quiet; then
-                echo "没有数据变化,跳过提交"; exit 0
+            # 整轮重试(crawler.py 幂等:同一天重复跑只覆盖当天记录)
+            attempt=1; max_attempts=5
+            until python3 crawler.py --once; do
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "爬虫重试 ${max_attempts} 次后仍有失败项,提交已抓到的部分数据"
+                break
               fi
-              git commit -m "chore: update reserve data ($(date +'%Y-%m-%d'))"
+              echo "第 ${attempt} 次未全部成功,60s 后重试..."
+              attempt=$((attempt + 1)); sleep 60
+            done
 
-              AUTH_URL="https://oauth2:${GITEE_TOKEN}@gitee.com/${GITEE_REPO_PATH}.git"
-              for i in 1 2 3 4 5; do
-                if git push "$AUTH_URL" "HEAD:main"; then
-                  echo "推送成功"; exit 0
-                fi
-                echo "第 ${i} 次推送失败,rebase 远端后重试..."
-                git pull --rebase --autostash "$AUTH_URL" main || true
-                sleep 5
-              done
-              echo "多次重试后仍推送失败"; exit 1
+            git add reserve.csv data 2>/dev/null || true
+            if git diff --staged --quiet; then
+              echo "没有数据变化,跳过提交"; exit 0
+            fi
+            git commit -m "chore: update reserve data ($(date +'%Y-%m-%d'))"
+
+            AUTH_URL="https://oauth2:${GITEE_TOKEN}@gitee.com/${GITEE_REPO_PATH}.git"
+            for i in 1 2 3 4 5; do
+              if git push "$AUTH_URL" "HEAD:main"; then
+                echo "推送成功"; exit 0
+              fi
+              echo "第 ${i} 次推送失败,rebase 远端后重试..."
+              git pull --rebase --autostash "$AUTH_URL" main || true
+              sleep 5
+            done
+            echo "多次重试后仍推送失败"; exit 1
