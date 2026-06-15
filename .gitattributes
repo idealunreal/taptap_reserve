@@ -1,0 +1,3 @@
+# 让 .sh 脚本在仓库里始终用 LF 换行,避免在 Windows 编辑后到 Linux 上
+# 报 "bad interpreter: /usr/bin/env bash^M" 的经典 CRLF 问题。
+*.sh text eol=lf
