@@ -65,7 +65,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add reserve.csv data 2>/dev/null || true
+          # 注意:必须分开 add。reserve.csv 一定存在;data/ 可能不存在,
+          # 若写成 `git add reserve.csv data`,只要 data 不存在,git 会整体失败
+          # 且【连 reserve.csv 也不暂存】,导致后面误判"无变化"而跳过提交。
+          git add reserve.csv
+          git add data 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "没有数据变化,跳过提交。"
             exit 0

@@ -48,7 +48,9 @@ until "$PY" crawler.py --once >>"$RUN_LOG" 2>&1; do
 done
 
 # 3) 提交并推送
-git add reserve.csv data 2>/dev/null || true
+# 必须分开 add:data/ 不存在时,合并写法会让 git 整体失败并漏掉 reserve.csv
+git add reserve.csv
+git add data 2>/dev/null || true
 if git diff --staged --quiet; then
   log "没有数据变化,跳过提交"
   log "=== 本轮结束 ==="
