@@ -8,10 +8,11 @@
 taptap_reserve/
 ├── crawler.py        # 主程序
 ├── games.json        # 跟踪列表 (app_id + 发布日期)
-├── data/             # 输出: 每个游戏一份 CSV
-│   └── {app_id}.csv  # 列: date, reserve_count, title
+├── reserve.csv       # 输出: 所有游戏汇总 (列: date, app_id, name, reserve_count, tracked_days)
 └── crawler.log
 ```
+
+> `tracked_days` 表示该游戏**已跟踪的天数**（第几天，从 1 开始），方便一眼看出某款游戏累计采集了多少天。
 
 ## 配置 `games.json`
 

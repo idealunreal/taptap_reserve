@@ -4,7 +4,8 @@
     - 从 games.json 读取要跟踪的游戏列表 (app_id + release_date)
     - 调用 TapTap 公开 web API 抓取每个游戏当前预约量
     - 只在 [release_date - 30天, release_date] 区间内记录
-    - 结果按游戏分文件追加到 data/{app_id}.csv (date,reserve_count,title)
+    - 结果追加到 reserve.csv (date,app_id,name,reserve_count,tracked_days)
+    - tracked_days: 该游戏已累计跟踪的天数 (第几天, 从 1 开始)
     - 每个 app_id 每天只写一条 (重复运行幂等覆盖当日)
 
 使用:
@@ -122,10 +123,20 @@ def in_window(release_date: Optional[date], today: date) -> bool:
     return start <= today <= release_date
 
 
-def upsert_row(csv_path: Path, today: date, app_id: str, reserve: int, title: str) -> None:
-    """汇总文件: 同一 (date, app_id) 重复写入则覆盖."""
+def _recompute_tracked_days(rows: list[dict]) -> None:
+    """为每个 app_id 按日期升序回填 tracked_days (第几天跟踪, 从 1 开始)."""
+    by_app: dict[str, list[dict]] = {}
+    for r in rows:
+        by_app.setdefault(r.get("app_id", ""), []).append(r)
+    for app_rows in by_app.values():
+        for i, r in enumerate(sorted(app_rows, key=lambda x: x.get("date", "")), start=1):
+            r["tracked_days"] = i
+
+
+def upsert_row(csv_path: Path, today: date, app_id: str, reserve: int, title: str) -> int:
+    """汇总文件: 同一 (date, app_id) 重复写入则覆盖. 返回该游戏已跟踪天数."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["date", "app_id", "name", "reserve_count"]
+    fieldnames = ["date", "app_id", "name", "reserve_count", "tracked_days"]
     rows: list[dict] = []
     if csv_path.exists():
         with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
@@ -134,10 +145,15 @@ def upsert_row(csv_path: Path, today: date, app_id: str, reserve: int, title: st
     rows = [r for r in rows if not (r.get("date") == today_s and r.get("app_id") == app_id)]
     rows.append({"date": today_s, "app_id": app_id, "name": title, "reserve_count": reserve})
     rows.sort(key=lambda r: (r["date"], r["app_id"]))
+    _recompute_tracked_days(rows)
     with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(rows)
+    for r in rows:
+        if r.get("date") == today_s and r.get("app_id") == app_id:
+            return int(r.get("tracked_days") or 0)
+    return 0
 
 
 def _load_games() -> list[dict]:
@@ -173,8 +189,9 @@ def run_once() -> int:
             failed += 1
             continue
         title = title or g.get("name") or app_id
-        upsert_row(DATA_FILE, today, app_id, reserve, title)
-        logging.info("[%s] %s reserve=%d -> %s", app_id, title, reserve, DATA_FILE)
+        tracked = upsert_row(DATA_FILE, today, app_id, reserve, title)
+        logging.info("[%s] %s reserve=%d (已跟踪 %d 天) -> %s",
+                     app_id, title, reserve, tracked, DATA_FILE)
         ok += 1
         time.sleep(SLEEP_BETWEEN)
 
