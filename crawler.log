@@ -311,3 +311,15 @@
 2026-06-16 10:23:15,022 INFO [753921] 崩坏：因缘精灵 reserve=1768869 -> D:\taptap_reserve\reserve.csv
 2026-06-16 10:23:17,717 INFO [749379] 天堂2：盟约 reserve=43124 -> D:\taptap_reserve\reserve.csv
 2026-06-16 10:23:19,718 INFO Done. ok=8 skipped=3 failed=0
+2026-06-17 10:00:03,363 INFO [740298] 不在 [发布前30天, 发布日] 窗口内, 跳过 (release=2026-05-27)
+2026-06-17 10:00:03,364 INFO [759688] 不在 [发布前30天, 发布日] 窗口内, 跳过 (release=2026-05-28)
+2026-06-17 10:00:03,364 INFO [746164] 不在 [发布前30天, 发布日] 窗口内, 跳过 (release=2026-06-05)
+2026-06-17 10:00:04,220 INFO [383874] 无限大 reserve=3288784 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:06,750 INFO [733908] 失控进化 reserve=2905802 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:09,253 INFO [593829] 蓝色星原：旅谣 reserve=1906277 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:11,747 INFO [772909] 粒粒的小人国 reserve=2304938 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:14,237 INFO [386208] 望月 reserve=2346821 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:16,766 INFO [730674] 异人之下 reserve=2141124 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:19,337 INFO [753921] 崩坏：因缘精灵 reserve=1769233 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:21,881 INFO [749379] 天堂2：盟约 reserve=43515 -> D:\taptap_reserve\reserve.csv
+2026-06-17 10:00:23,889 INFO Done. ok=8 skipped=3 failed=0
